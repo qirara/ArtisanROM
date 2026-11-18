@@ -17,7 +17,7 @@ on:
       - '.github/workflows/p3q.yml'
       - 'platform/sm8350/**'
       - 'target/p3q/**'
-      - 'unica/configs/qssi.sh'
+      - 'unica/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
