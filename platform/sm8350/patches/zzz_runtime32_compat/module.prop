@@ -1,0 +1,6 @@
+id=runtime32_compat
+name=sm8350 32-bit runtime compatibility
+version=1.0
+versionCode=1
+author=At30c, UN1CA
+description=Provides the Android 16 ARM32 Runtime, I18n, ART and r11s system dependencies for the 32-bit sm8350 vendor services (audio HAL, Codec2/OMX, DRM).

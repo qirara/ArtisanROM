@@ -1,0 +1,6 @@
+id=blobs
+name=sm8350 blobs
+version=1.0
+versionCode=1
+author=UN1CA
+description=Hotword enrollment, GameDriver and Adreno GPU driver blobs for sm8350 devices.
