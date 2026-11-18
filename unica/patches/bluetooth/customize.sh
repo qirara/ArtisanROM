@@ -253,11 +253,17 @@ fi
 # SEC_PRODUCT_FEATURE_BLUETOOTH_SUPPORT_XLNA_CONTROL
 if $SOURCE_BLUETOOTH_SUPPORT_XLNA_CONTROL; then
     if ! $TARGET_BLUETOOTH_SUPPORT_XLNA_CONTROL; then
+        XLNA_PATCH="$MODPATH/xlna/Bluetooth.apk/0001-Disable-SUPPORT_XLNA_CONTROL-support.patch"
+        # The Android 16 QPR2 (BP4A) qssi build moved startLNAControl() from ScanManager$ScanNative to ScanManager
+        if [[ "$TARGET_OS_SINGLE_SYSTEM_IMAGE" == "qssi" ]] && [[ "$BT_APK_REL" == app/Bluetooth@BP4A.*/* ]]; then
+            XLNA_PATCH="$MODPATH/xlna/Bluetooth.apk/0002-Disable-SUPPORT_XLNA_CONTROL-support-BP4A-qssi.patch"
+        fi
         DECODE_APK_IN_APEX "$BT_APK"
         LOG "- Applying \"Disable SUPPORT_XLNA_CONTROL support\" to apex_payload/$BT_APK_REL"
         APPLY_PATCH "system" "$BT_APK_WORK_PATH" \
-            "$MODPATH/xlna/Bluetooth.apk/0001-Disable-SUPPORT_XLNA_CONTROL-support.patch" \
+            "$XLNA_PATCH" \
             > /dev/null
+        unset XLNA_PATCH
     fi
 else
     if $TARGET_BLUETOOTH_SUPPORT_XLNA_CONTROL; then
@@ -287,6 +293,11 @@ elif xxd -p -c 0 "$TMP_DIR/unknown/apex_payload/lib64/libbluetooth_jni.so" | \
     # August firmware variant used by current upstream donors.
     VK_FROM="28f7773948050037"
     VK_TO="28f777392a000014"
+elif xxd -p -c 0 "$TMP_DIR/unknown/apex_payload/lib64/libbluetooth_jni.so" | \
+        grep -q "88d6743948050037"; then
+    # BP4A qssi (S9260) variant, btif_storage get_secure_storage_key() vkSupport check
+    VK_FROM="88d6743948050037"
+    VK_TO="88d674392a000014"
 fi
 
 HEX_PATCH "$TMP_DIR/unknown/apex_payload/lib64/libbluetooth_jni.so" \
