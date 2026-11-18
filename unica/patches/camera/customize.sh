@@ -370,8 +370,16 @@ if [ -f "$WORK_DIR/system/system/lib64/libstagefright.so" ]; then
     # Source platform's ACodec reads 512 bytes into a 255-byte buffer via __fread_chk,
     # causing SIGABRT in mediaserver when third-party apps (WhatsApp/Telegram) use
     # the video encoder. Patch the read size from 0x200 to 0xff to match the buffer.
-    HEX_PATCH "$WORK_DIR/system/system/lib64/libstagefright.so" \
-        "02408052e30314aae41f8052" "e21f8052e30314aae41f8052"
+    # [mov w2, #0x200; mov x3, x20|x21; mov w4, #0xff] -> [mov w2, #0xff; ...] (essi | qssi build)
+    if xxd -p -c 0 "$WORK_DIR/system/system/lib64/libstagefright.so" | grep -q "02408052e30314aae41f8052"; then
+        HEX_PATCH "$WORK_DIR/system/system/lib64/libstagefright.so" \
+            "02408052e30314aae41f8052" "e21f8052e30314aae41f8052"
+    elif xxd -p -c 0 "$WORK_DIR/system/system/lib64/libstagefright.so" | grep -q "02408052e30315aae41f8052"; then
+        HEX_PATCH "$WORK_DIR/system/system/lib64/libstagefright.so" \
+            "02408052e30315aae41f8052" "e21f8052e30315aae41f8052"
+    else
+        LOGW "Unknown libstagefright.so build, skipping the ACodec::reconfigEncoder4OtherApps __fread_chk fix"
+    fi
 else
     LOG "- Skipping 64-bit libstagefright model patch (library is absent)"
 fi
