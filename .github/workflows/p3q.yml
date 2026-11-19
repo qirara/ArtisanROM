@@ -26,9 +26,9 @@ concurrency:
 env:
   CLANG_VERSION: 'r416183b'
   CLANG_URL: 'https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b.tar.gz'
-  # Pushes build in debug mode, so that unsupported SOURCE/TARGET feature combinations are reported
-  # all at once instead of aborting the build
-  MAKE_ROM_ARGS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.make_rom_args || '--debug' }}
+  # Release (user) build by default, pass --debug with workflow_dispatch to get warnings instead of
+  # aborts for unsupported SOURCE/TARGET feature combinations
+  MAKE_ROM_ARGS: ${{ github.event.inputs.make_rom_args || '' }}
 
 jobs:
   kernel:
@@ -141,9 +141,9 @@ jobs:
       - name: Download stock firmwares
         uses: nick-fields/retry@v4
         with:
-          timeout_minutes: 60
+          timeout_minutes: 90
           max_attempts: 3
-          retry_on: error
+          retry_on: any
           command: source ./buildenv.sh p3q && ./scripts/download_fw.sh
 
       - name: Extract stock firmwares

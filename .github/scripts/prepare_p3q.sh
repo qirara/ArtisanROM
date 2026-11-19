@@ -136,6 +136,12 @@ COPY_IF_MISSING()
         \( -iname "*euicc*" -o -iname "EuiccGoogle" \) 2> /dev/null | sed "s|$TARGET_FW||" | tr "\n" " ")"
     echo
 
+    echo "---------- Source vendor MIDAS/SAIV models ----------"
+    for d in etc/midas etc/saiv saiv etc/singletake; do
+        find "$SOURCE_FW/vendor/$d" -maxdepth 4 2> /dev/null | sed "s|$SOURCE_FW||" | LC_ALL=C sort || true
+    done
+    echo
+
     echo "---------- /vendor/lib/modules ----------"
     find "$TARGET_FW/vendor/lib/modules" -maxdepth 2 2> /dev/null | sed "s|$TARGET_FW||" | LC_ALL=C sort || true
     echo
