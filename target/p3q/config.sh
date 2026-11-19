@@ -3,7 +3,8 @@
 # Device configuration file for Galaxy S21 Ultra 5G (Snapdragon) (p3q)
 TARGET_NAME="Galaxy S21 Ultra 5G (Snapdragon)"
 TARGET_CODENAME="p3q"
-TARGET_ASSERT_MODEL=("SM-G9980")
+# The model is checked in installer/assertions.edify: some p3q recoveries (eg. OrangeFox) do not expose ro.boot.em.model
+TARGET_ASSERT_MODEL=()
 TARGET_PLATFORM="sm8350"
 # samloader-rs does not need an IMEI to download from FUS, only the TAC is set here
 TARGET_FIRMWARE="SM-G9980/TGY/35420311"
