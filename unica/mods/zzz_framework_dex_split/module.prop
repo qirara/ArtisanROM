@@ -1,0 +1,6 @@
+id=framework_dex_split
+name=framework.jar dex split
+version=1.0
+versionCode=1
+author=UN1CA
+description=Moves the patched ApplicationPackageManager out of the full framework.jar classes.dex of qssi sources.
