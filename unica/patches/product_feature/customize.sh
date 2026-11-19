@@ -144,10 +144,11 @@ if $SOURCE_AUDIO_SUPPORT_VIRTUAL_VIBRATION_SOUND; then
     if ! $TARGET_AUDIO_SUPPORT_VIRTUAL_VIBRATION_SOUND; then
         APPLY_PATCH "system" "system/framework/framework.jar" \
             "$MODPATH/audio/virtual_vib/framework.jar/0001-Disable-virtual-vibration-support.patch"
-        if [[ "$TARGET_CODENAME" == "r8s" && "$SOURCE_PLATFORM_SDK_VERSION" -ge 36 ]]; then
+        if [ "$SOURCE_PLATFORM_SDK_VERSION" -ge 36 ]; then
             # Preserve Android 16 audio/vibrator service interfaces. The legacy
             # patch deletes fields and compiler-generated lambdas from a
-            # different services.jar, including unrelated Bluetooth routing.
+            # different services.jar, including unrelated Bluetooth routing
+            # (it does not apply to the qssi S9260 build either).
             . "$MODPATH/audio/virtual_vib/disable_native.sh"
         else
             APPLY_PATCH "system" "system/framework/services.jar" \

@@ -6,7 +6,7 @@ DECODE_APK "system" "system/framework/services.jar"
 R8S_VIB_HELPER="$(find "$APKTOOL_DIR/system/framework/services.jar" -type f \
     -path '*/com/android/server/vibrator/VirtualVibSoundHelper.smali' -printf '%P\n')"
 if [[ -z "$R8S_VIB_HELPER" || "$R8S_VIB_HELPER" == *$'\n'* ]]; then
-    ABORT "Expected one Android 16 VirtualVibSoundHelper for the r8s sound adaptation"
+    ABORT "Expected one Android 16 VirtualVibSoundHelper for the virtual vibration sound adaptation"
 fi
 
 # Method descriptors are stable interfaces; dex splits, registers, labels and
@@ -30,5 +30,5 @@ SMALI_PATCH "system" "system/priv-app/SecSettings/SecSettings.apk" "$R8S_VIB_CON
 # SettingsProvider's existing key is harmless: both sound entry points above
 # are disabled even if a backup restores vibration_sound_enabled=1. Do not
 # rewrite its database migration or remove unrelated Settings reset logic.
-LOG "- Disabled r8s virtual vibration sound; native haptics and Bluetooth retained"
+LOG "- Disabled virtual vibration sound; native haptics and Bluetooth retained"
 unset R8S_VIB_HELPER R8S_VIB_CONTROLLER
