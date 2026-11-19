@@ -14,6 +14,12 @@ _IMPORT_LEGACY_NXP_JNI()
     local MODERN_JNI="$SRC_DIR/prebuilts/samsung/pa3qzcx/system/lib64/libnfc_nci_jni.so"
 
     if [ ! -f "$FW_DIR/$TARGET_FIRMWARE_PATH/system/$CORE_PATH" ]; then
+        # A 64-bit-only source has no 32-bit NfcService process: the 32-bit JNI would be unused anyway
+        # (eg. One UI 7 targets ship libnfc_nxpsn_jni.so in /system/lib, but the core lib in /vendor)
+        if [ "$ABI_DIR" = "lib" ] && [ ! -f "$WORK_DIR/system/system/bin/app_process32" ]; then
+            LOG "- Skipping 32-bit NFC JNI import, the source is 64-bit only"
+            return 0
+        fi
         _LOG "Missing direct NFC dependency in target firmware: $CORE_PATH"
         return 1
     fi
