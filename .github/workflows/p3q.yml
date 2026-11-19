@@ -280,10 +280,20 @@ jobs:
           name: p3q-kernel
           path: out/kernel/p3q
 
+      # pierotofy/set-swap-space replaces the last swap device with a file of the same path, which
+      # fails on runners that swap on /dev/zram0: add a separate 12 GiB swap file instead
       - name: Add swapspace
-        uses: pierotofy/set-swap-space@v1.0
-        with:
-          swap-size-gb: 12
+        run: |
+          SWAP_FILE="/p3q.swap"
+          if mountpoint -q /mnt && [ "$(df --output=avail -BG /mnt | tail -n 1 | tr -dc '0-9')" -ge 20 ]; then
+              SWAP_FILE="/mnt/p3q.swap"
+          fi
+          sudo fallocate -l 12G "$SWAP_FILE" || sudo dd if=/dev/zero of="$SWAP_FILE" bs=1M count=12288 status=none
+          sudo chmod 600 "$SWAP_FILE"
+          sudo mkswap "$SWAP_FILE"
+          sudo swapon "$SWAP_FILE"
+          free -h
+          swapon --show
 
       - name: Build ROM
         run: |
