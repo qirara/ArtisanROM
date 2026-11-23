@@ -1,4 +1,5 @@
-# KernelSU Next enabled kernel, built with target/p3q/kernel/build_kernel.sh.
+# Stock kernel (P3Q_KERNEL=stock, default without a custom kernel) or the KernelSU Next enabled kernel
+# (P3Q_KERNEL=kernelsu), built with target/p3q/kernel/build_kernel.sh.
 # The kernel artifacts are read from $P3Q_KERNEL_DIR (defaults to $OUT_DIR/kernel/p3q).
 #
 # - boot.img: kernel replaced with Image + lahaina base DTBs, stock header/ramdisk kept
@@ -9,6 +10,36 @@
 # - vendor_boot.img: untouched, the drivers shipped in it as GKI modules are built-in
 
 KERNEL_DIR="${P3Q_KERNEL_DIR:-$OUT_DIR/kernel/p3q}"
+
+# P3Q_KERNEL=stock keeps the stock kernel, dtbo and modules (no KernelSU). It is also the default
+# when no custom kernel was built.
+if [[ "$P3Q_KERNEL" == "stock" ]] || { [ ! "$P3Q_KERNEL" ] && [ ! -f "$KERNEL_DIR/Image-dtb" ]; }; then
+    LOG "- Keeping the stock kernel"
+
+    # The ROM partitions are built as $TARGET_OS_FILE_SYSTEM_TYPE images, the stock kernel must mount them
+    if [[ "$TARGET_OS_FILE_SYSTEM_TYPE" == "erofs" ]]; then
+        if [ -d "$TMP_DIR" ]; then
+            EVAL "rm -rf \"$TMP_DIR\""
+        fi
+        EVAL "mkdir -p \"$TMP_DIR\""
+        if ! MKBOOTIMG_ARGS="$(unpack_bootimg --boot_img "$WORK_DIR/kernel/boot.img" --out "$TMP_DIR/boot" 2>&1)"; then
+            ABORT "Failed to extract boot.img\n\n$MKBOOTIMG_ARGS"
+        fi
+        if [[ "$(READ_BYTES_AT "$TMP_DIR/boot/kernel" "0" "2")" == "8b1f" ]]; then
+            EVAL "gzip -dc \"$TMP_DIR/boot/kernel\" > \"$TMP_DIR/Image\""
+        else
+            EVAL "mv -f \"$TMP_DIR/boot/kernel\" \"$TMP_DIR/Image\""
+        fi
+        if ! grep -q -a -F "erofs" "$TMP_DIR/Image"; then
+            ABORT "The stock kernel has no EROFS support, the ROM partitions would not mount.\n\nUse TARGET_OS_FILE_SYSTEM_TYPE=\"ext4\" or build the custom kernel (P3Q_KERNEL=kernelsu)."
+        fi
+        LOG "- The stock kernel supports EROFS"
+        EVAL "rm -rf \"$TMP_DIR\""
+    fi
+
+    unset KERNEL_DIR MKBOOTIMG_ARGS
+    return 0
+fi
 
 for f in "Image-dtb" "dtbo.img" "kernel.release"; do
     if [ ! -f "$KERNEL_DIR/$f" ]; then

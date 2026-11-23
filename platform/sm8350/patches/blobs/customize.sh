@@ -11,6 +11,15 @@ ADD_TO_WORK_DIR "a73xqxx" "product" "priv-app/HotwordEnrollmentOKGoogleEx3HEXAGO
 ADD_TO_WORK_DIR "a73xqxx" "product" "priv-app/HotwordEnrollmentXGoogleEx3HEXAGON" 0 0 755 "u:object_r:system_file:s0"
 LOG_STEP_OUT
 
+# Samsung Device Root Key (DRK, system_server DeviceRootKeyService) client libs for Keymaster 4.0 vendors:
+# the source ones talk to vendor.samsung.hardware.keymint.ISehKeyMintFactory, which sm8350 does not have.
+# Same JNI exports as the source library (UN1CA ships the same swap on its sm8350/sm7325 targets).
+LOG_STEP_IN "- Adding Keymaster based Samsung DRK libs"
+ADD_TO_WORK_DIR "r9qxxx" "system" "system/lib64/lib_nativeJni.dk.samsung.so" 0 0 644 "u:object_r:system_lib_file:s0"
+DELETE_FROM_WORK_DIR "system" "system/lib64/libdk_native_keymint.so"
+ADD_TO_WORK_DIR "r9qxxx" "system" "system/lib64/libdk_native_keymaster.so" 0 0 644 "u:object_r:system_lib_file:s0"
+LOG_STEP_OUT
+
 if [ -f "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/priv-app/GameDriver-SM8350/GameDriver-SM8350.apk" ]; then
     ADD_TO_WORK_DIR "$TARGET_FIRMWARE" "system" "system/priv-app/GameDriver-SM8350" 0 0 755 "u:object_r:system_file:s0"
 fi

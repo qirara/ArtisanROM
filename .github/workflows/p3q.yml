@@ -1,6 +1,7 @@
 name: Build p3q
 
-# Galaxy S21 Ultra 5G (Snapdragon) (p3q) flashable zip (One UI 8.5, qssi source) with KernelSU Next kernel.
+# Galaxy S21 Ultra 5G (Snapdragon) (p3q) flashable zip (One UI 8.5, qssi source).
+# The stock kernel is kept by default, the KernelSU Next kernel is built with kernel=kernelsu.
 
 on:
   workflow_dispatch:
@@ -9,6 +10,13 @@ on:
         description: 'Extra make_rom.sh arguments (eg. --debug)'
         type: string
         default: ''
+      kernel:
+        description: 'Kernel to ship'
+        type: choice
+        options:
+          - stock
+          - kernelsu
+        default: stock
   push:
     branches:
       - 'claude/s21ultra-oneui-port-8zgkkl'
@@ -29,10 +37,13 @@ env:
   # Release (user) build by default, pass --debug with workflow_dispatch to get warnings instead of
   # aborts for unsupported SOURCE/TARGET feature combinations
   MAKE_ROM_ARGS: ${{ github.event.inputs.make_rom_args || '' }}
+  # stock: keep the stock kernel (default), kernelsu: build and ship the KernelSU Next kernel
+  P3Q_KERNEL: ${{ github.event.inputs.kernel || 'stock' }}
 
 jobs:
   kernel:
     name: Build kernel (KernelSU Next)
+    if: ${{ (github.event.inputs.kernel || 'stock') == 'kernelsu' }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -131,6 +142,7 @@ jobs:
   build:
     name: Build ROM
     needs: kernel
+    if: ${{ !cancelled() && (needs.kernel.result == 'success' || needs.kernel.result == 'skipped') }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -279,6 +291,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Download kernel
+        if: env.P3Q_KERNEL == 'kernelsu'
         uses: actions/download-artifact@v4
         with:
           name: p3q-kernel
