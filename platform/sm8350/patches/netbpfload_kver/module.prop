@@ -1,0 +1,6 @@
+id=netbpfload_kver
+name=sm8350 netbpfload kernel compatibility
+version=1.0
+versionCode=1
+author=UN1CA
+description=Lets the Android 16 QPR2 Tethering module netbpfload run on the 5.4 kernel (skips its 25Q4 kernel 5.10 requirement, re-signs the APEX).
