@@ -328,3 +328,8 @@ jobs:
       # Fails the run when the built ROM can not boot because of its SELinux files
       - name: Check SELinux files
         run: python3 ./.github/scripts/check_selinux.py out/target/p3q/work_dir
+
+      # Fails the run when init would abort SetupCgroups (cgroup v1 controller missing in the kernel)
+      - name: Check cgroup controllers
+        if: ${{ !cancelled() }}
+        run: python3 ./.github/scripts/check_cgroups.py out/target/p3q/work_dir
