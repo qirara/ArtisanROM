@@ -38,3 +38,12 @@ etc/permissions/privapp-permissions-com.qualcomm.location.xml
 framework/com.qti.location.sdk.jar
 priv-app/com.qualcomm.location
 "
+
+# vendor clean-up
+# - The stock vendor declares the schedtune (stune) cgroup controller, but the 5.4 kernel only has uclamp.
+#   Android 16 QPR2 init aborts SetupCgroups when a non-optional controller fails to mount, so the cgroup v2
+#   system/app hierarchy is never created and apexd-bootstrap cannot start ("bootstrap-apexd-failed" bootloop).
+#   This file only declares schedtune, the vendor task profiles do not use it.
+VENDOR_DEBLOAT+="
+etc/cgroups.json
+"
