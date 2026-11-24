@@ -63,3 +63,26 @@ SET_PROP "product" "bluetooth.profile.sap.server.enabled" "true"
 SET_PROP "product" "bluetooth.profile.ccp.server.enabled" "false"
 SET_PROP "product" "bluetooth.profile.vcp.controller.enabled" "false"
 LOG_STEP_OUT
+
+# The source QCC stack (QTI gps-release: com.qti.qcc and the qccsyshal system HAL) needs a binderized
+# qccvndhal, the One UI 7 lahaina vendor only ships its HIDL passthrough implementation: the system
+# HAL exits and com.qti.qcc ANRs every ~16 seconds, forever.
+LOG_STEP_IN "- Removing the source QCC stack"
+if $TARGET_OS_BUILD_SYSTEM_EXT_PARTITION; then
+    QCC_SYSTEM_EXT="$WORK_DIR/system_ext"
+else
+    QCC_SYSTEM_EXT="$WORK_DIR/system/system/system_ext"
+fi
+QCC_FILES="$(python3 "$MODPATH/qcc.py" list "$QCC_SYSTEM_EXT")"
+while IFS= read -r QCC_FILE; do
+    [ "$QCC_FILE" ] || continue
+    DELETE_FROM_WORK_DIR "system_ext" "$QCC_FILE"
+done <<< "$QCC_FILES"
+for QCC_MANIFEST in "$WORK_DIR/system/system/etc/vintf/manifest.xml" "$QCC_SYSTEM_EXT/etc/vintf/manifest.xml"; do
+    [ -f "$QCC_MANIFEST" ] || continue
+    if [[ "$(python3 "$MODPATH/qcc.py" strip-manifest "$QCC_MANIFEST")" != "0" ]]; then
+        LOG "- Removing the qccsyshal HAL from ${QCC_MANIFEST//$WORK_DIR/}"
+    fi
+done
+unset QCC_SYSTEM_EXT QCC_FILES QCC_FILE QCC_MANIFEST
+LOG_STEP_OUT
