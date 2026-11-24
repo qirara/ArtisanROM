@@ -132,6 +132,14 @@ if [ -d "$KERNEL_DIR/modules" ]; then
         done < "$MODULES_DIR/modules.load" > "$TMP_DIR/root/vendor/lib/modules/modules.load"
         ADD_TO_WORK_DIR "$TMP_DIR/root" "vendor" "lib/modules/modules.load" 0 0 644 "u:object_r:vendor_file:s0"
     fi
+
+    # vendor_modprobe.sh switches to /vendor/lib/modules/5.4-gki when the first module it tries from
+    # /vendor/lib/modules does not load. Those are stock modules, they can only fail with this kernel
+    # ("disagrees about version of symbol module_layout"): always use the rebuilt ones
+    if grep -q "^GKI_MOD_PATH=\"/vendor/lib/modules/5.4-gki\"$" "$WORK_DIR/vendor/bin/vendor_modprobe.sh" 2> /dev/null; then
+        LOG "- Patching /vendor/bin/vendor_modprobe.sh"
+        sed -i "s|^GKI_MOD_PATH=.*|GKI_MOD_PATH=\"/vendor/lib/modules\"|" "$WORK_DIR/vendor/bin/vendor_modprobe.sh"
+    fi
     LOG_STEP_OUT
 fi
 
