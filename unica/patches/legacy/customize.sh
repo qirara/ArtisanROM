@@ -217,6 +217,24 @@ if [ "$TARGET_PLATFORM_SDK_VERSION" -lt "35" ]; then
     fi
 fi
 
+# Unlock CE storage without an auth token (first API level <= 30)
+# - LockSettingsService passes the Gatekeeper auth token to vold unlockCeStorage() when
+#   ro.product.first_api_level <= 30 and the user has a lock screen credential, but the source vold
+#   only accepts an empty token ("Vold doesn't use auth tokens, but non-empty token passed to
+#   unlockUserKey.") and fails with EINVAL: once a PIN/pattern/password is set, user 0 CE storage is
+#   never unlocked again after a reboot and the device stays on "Phone is starting".
+# - CE keys created by this vold (setCeStorageProtection) are not auth bound, never pass the token.
+if [ "$TARGET_PRODUCT_SHIPPING_API_LEVEL" -le "30" ] && \
+        grep -q -a -F "Vold doesn't use auth tokens" "$WORK_DIR/system/system/bin/vold"; then
+    PATCHED=true
+    LOG "- Unlocking CE storage without the auth token"
+    SMALI_PATCH "system" "system/framework/services.jar" \
+        "smali/com/android/server/locksettings/LockSettingsService.smali" "replace" \
+        'unlockCeStorage(ILcom/android/server/locksettings/SyntheticPasswordManager$SyntheticPassword;)V' \
+        "const/16 v6, 0x1e" \
+        "const/4 v6, 0x0"
+fi
+
 # Ensure IMAGE_CODEC_SAMSUNG support (pre-API 35)
 if [ "$TARGET_PLATFORM_SDK_VERSION" -lt "35" ]; then
     if [ "$(GET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO")" ] && \
