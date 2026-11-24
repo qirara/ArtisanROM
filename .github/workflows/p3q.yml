@@ -27,8 +27,9 @@ on:
       - 'target/p3q/**'
       - 'unica/**'
 
+# Stock and KernelSU Next builds of the same commit do not cancel each other
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.kernel || 'stock' }}
   cancel-in-progress: true
 
 env:
@@ -333,3 +334,23 @@ jobs:
       - name: Check cgroup controllers
         if: ${{ !cancelled() }}
         run: python3 ./.github/scripts/check_cgroups.py out/target/p3q/work_dir
+
+      # File lists of the built ROM and of both stock firmwares, to check what was added/removed
+      - name: List ROM and firmware files
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/p3q-files"
+          LIST() { [ -d "$1" ] && (cd "$1" && find . \( -type f -o -type l \) -printf '%P %s\n' | LC_ALL=C sort) > "$2" || true; }
+          LIST out/target/p3q/work_dir "$RUNNER_TEMP/p3q-files/rom_work_dir.txt"
+          for FW in out/fw/*; do
+              LIST "$FW" "$RUNNER_TEMP/p3q-files/fw_$(basename "$FW").txt"
+          done
+          ls -la "$RUNNER_TEMP/p3q-files"
+
+      - name: Upload ROM and firmware file lists
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p3q-file-lists
+          path: ${{ runner.temp }}/p3q-files
+          if-no-files-found: ignore
