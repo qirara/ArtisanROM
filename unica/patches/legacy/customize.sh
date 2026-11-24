@@ -244,6 +244,15 @@ if [ "$TARGET_PLATFORM_SDK_VERSION" -lt "35" ]; then
             "$(GET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO"),image_codec.samsung.v2"
     fi
 fi
+# - The source camera only implements image_codec.samsung.v2 (SecImageCodecNode, on the system quram
+#   codec): with the target image_codec.samsung.v1 it falls back to ImageCodecDummyNode and crashes when
+#   recording a video or in Pro mode ("ImageCodecDummyNode can't initialize").
+if [[ "$(GET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO")" == *"image_codec.samsung.v1"* ]] && \
+        [[ "$(GET_FLOATING_FEATURE_CONFIG "$FW_DIR/$(cut -d "/" -f 1 -s <<< "$SOURCE_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$SOURCE_FIRMWARE")/system/system/etc/floating_feature.xml" "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO")" == *"image_codec.samsung.v2"* ]]; then
+    PATCHED=true
+    SET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO" \
+        "$(GET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_CAMERA_CONFIG_VENDOR_LIB_INFO" | sed "s/image_codec\.samsung\.v1/image_codec.samsung.v2/")"
+fi
 
 # Ensure Knox Matrix support
 # - Check if target firmware runs on One UI 5.1.1 or above
