@@ -1,10 +1,10 @@
 
 # target/p3q/installer/install-end.edify
 # A stock vbmeta with verification enabled makes first stage init panic on the ROM /vendor (dm-verity
-# "Hash device is too small"): disable its verification, see target/p3q/installer/customize.sh
+# "Hash device is too small"): disable its verification, see target/p3q/installer/root/vbmeta_disable_verification.sh
 ui_print("Disabling vbmeta verification...");
 package_extract_file("vbmeta_disable_verification.sh", "/tmp/vbmeta_disable_verification.sh");
 set_metadata("/tmp/vbmeta_disable_verification.sh", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0755);
 ifelse(run_program("/system/bin/sh", "/tmp/vbmeta_disable_verification.sh") == "0", "",
     ifelse(run_program("/sbin/sh", "/tmp/vbmeta_disable_verification.sh") == "0", "",
-        ui_print("! Could not disable vbmeta verification: flash a vbmeta with verification disabled before booting")));
+        ui_print("! Could not disable vbmeta verification, do not reboot: send /tmp/recovery.log")));
