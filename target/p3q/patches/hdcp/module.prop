@@ -1,0 +1,4 @@
+id=hdcp
+name=HDCP key provisioning
+author=UN1CA
+description=Uses the stock qchdcpkprov (HIDL client) with the stock HIDL HDCP key provisioning HAL.
