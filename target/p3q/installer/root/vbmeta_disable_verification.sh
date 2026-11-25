@@ -6,13 +6,21 @@
 # A stock vbmeta (eg. restored with Odin) keeps hashtree descriptors that do not match the ROM partitions:
 # first stage init fails to set up dm-verity for /vendor ("verity: Hash device is too small") and panics.
 #
+# 1. Write the flags byte through the vbmeta partition.
+# 2. Samsung recovery kernels can refuse to open vbmeta for writing ("Read-only file system"): write the
+#    same byte through the whole disk, at the partition offset, once the data there is checked to be the
+#    vbmeta partition.
+# 3. Otherwise create /sdcard/vbmeta_disabled.tar (this device vbmeta with the flags set) to flash with
+#    Odin.
+#
 # Run by the ROM installer (run_program, no argument) or as the update-binary of a standalone zip
-# (<api version> <ui_print fd> <zip>). Only uses sh, dd and printf, whichever implementation the
-# recovery ships. Every step is logged to /tmp/recovery.log. Exit status: 0 on success (or nothing to do),
-# 1 on failure.
+# (<api version> <ui_print fd> <zip>). Only uses sh and the dd/printf/blockdev/readlink/md5sum/tar the
+# recovery ships (toolbox, toybox or busybox). Every step is logged to /tmp/recovery.log.
+# Exit status: 0 when verification is disabled (or there is nothing to do), 1 otherwise.
 
 OUTFD="$2"
 LOGFILE="/tmp/recovery.log"
+ODIN_DIR="/sdcard"
 
 case "$OUTFD" in
     ''|*[!0-9]*)
@@ -26,6 +34,13 @@ case "$OUTFD" in
     *) [ -p "/proc/self/fd/$OUTFD" ] || OUTFD="" ;;
 esac
 
+# The installers retry with another shell when run_program fails: run once per updater process
+if [ -z "$2" ] && [ -n "$OUTFD" ]; then
+    MARKER="/tmp/vbmeta_disable_verification.$PPID"
+    [ -f "$MARKER" ] && exit 1
+    : > "$MARKER" 2> /dev/null
+fi
+
 ui_print()
 {
     if [ -n "$OUTFD" ]; then
@@ -36,7 +51,31 @@ ui_print()
     echo "vbmeta: $1" >> "$LOGFILE" 2> /dev/null
 }
 
-# Hexadecimal value of the flags byte, for the log only
+log()
+{
+    echo "vbmeta: $1" >> "$LOGFILE" 2> /dev/null
+}
+
+# First implementation of a tool that runs: TOOL="$(find_tool <name> <test arguments>)"
+find_tool()
+{
+    for t in "$1" "toybox $1" "busybox $1"; do
+        if $t $2 > /dev/null 2>&1; then
+            echo "$t"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Byte at the given offset of a device or file (NUL bytes read as empty)
+read_byte()
+{
+    { R="$($DD if="$1" bs=1 skip="$2" count=1 2> /dev/null)"; } 2> /dev/null
+    echo "$R"
+}
+
+# Hexadecimal value of the vbmeta flags byte, for the messages only
 flags_hex()
 {
     for OD in "od" "toybox od" "busybox od"; do
@@ -47,6 +86,14 @@ flags_hex()
         fi
     done
     echo "unknown"
+}
+
+flush()
+{
+    sync
+    for f in "$@"; do
+        [ -n "$BLOCKDEV" ] && $BLOCKDEV --flushbufs "$f" > /dev/null 2>&1
+    done
 }
 
 DEV=""
@@ -88,27 +135,116 @@ if [ -z "$PRINTF" ]; then
     exit 1
 fi
 
-ui_print "Device vbmeta: $DEV, flags byte $(flags_hex) (dd: $DD)"
-if [ "$($DD if="$DEV" bs=1 skip=123 count=1 2> /dev/null)" = "$B3" ]; then
+BLOCKDEV="$(find_tool blockdev "--getro $DEV")"
+
+ui_print "Device vbmeta: $DEV, flags byte $(flags_hex)"
+if [ "$(read_byte "$DEV" 123)" = "$B3" ]; then
     ui_print "Verification is already disabled"
     exit 0
 fi
 
-# Recovery kernels may set the partitions read-only
-for t in "blockdev" "toybox blockdev" "busybox blockdev"; do
-    $t --setrw "$DEV" > /dev/null 2>&1 && break
-done
-
-# Block devices are not truncated by dd, no conv=notrunc (not supported by every dd)
+# 1. Through the vbmeta partition (block devices are not truncated by dd, no conv=notrunc: not supported
+#    by every dd)
+[ -n "$BLOCKDEV" ] && $BLOCKDEV --setrw "$DEV" > /dev/null 2>&1
 $PRINTF '\003' | $DD of="$DEV" bs=1 seek=123 count=1 >> "$LOGFILE" 2>&1
-sync
-for t in "blockdev" "toybox blockdev" "busybox blockdev"; do
-    $t --flushbufs "$DEV" > /dev/null 2>&1 && break
-done
-
-if [ "$($DD if="$DEV" bs=1 skip=123 count=1 2> /dev/null)" = "$B3" ]; then
+flush "$DEV"
+if [ "$(read_byte "$DEV" 123)" = "$B3" ]; then
     ui_print "Verification disabled, flags byte now $(flags_hex)"
     exit 0
 fi
-ui_print "ERROR: could not write $DEV, flags byte still $(flags_hex)"
+ui_print "Cannot write the vbmeta partition, trying through the whole disk"
+
+# 2. Through the whole disk, at the partition offset
+READLINK="$(find_tool readlink "-f /")"
+MD5SUM="$(find_tool md5sum "/proc/self/cmdline")"
+PART=""
+DISK=""
+START=""
+if [ -n "$READLINK" ] && [ -n "$MD5SUM" ]; then
+    PART="$($READLINK -f "$DEV" 2> /dev/null)"
+    SYSPART="/sys/class/block/${PART##*/}"
+    if [ -f "$SYSPART/partition" ] && [ -f "$SYSPART/start" ]; then
+        START="$(cat "$SYSPART/start" 2> /dev/null)"
+        SYSDISK="$($READLINK -f "$SYSPART/.." 2> /dev/null)"
+        DISK="/dev/block/${SYSDISK##*/}"
+    fi
+fi
+case "$START" in
+    ''|*[!0-9]*) START="" ;;
+esac
+if [ -n "$START" ] && [ -b "$DISK" ] && [ "$DISK" != "$PART" ]; then
+    log "partition $PART starts at sector $START of $DISK"
+    # No shell arithmetic on offsets (32-bit in mksh): the first 512-byte sector of the partition is
+    # read and written back with skip/seek in sectors
+    PART_HEAD="$($DD if="$DEV" bs=512 count=8 2> /dev/null | $MD5SUM 2> /dev/null)"
+    DISK_HEAD="$($DD if="$DISK" bs=512 skip="$START" count=8 2> /dev/null | $MD5SUM 2> /dev/null)"
+    SECTOR="/tmp/vbmeta_sector.bin"
+    rm -f "$SECTOR" "$SECTOR.new"
+    $DD if="$DISK" of="$SECTOR" bs=512 skip="$START" count=1 > /dev/null 2>&1
+    if [ "$($DD if="$SECTOR" bs=4 count=1 2> /dev/null)" = "AVB0" ] && \
+            [ -n "$PART_HEAD" ] && [ "$PART_HEAD" = "$DISK_HEAD" ]; then
+        {
+            $DD if="$SECTOR" bs=123 count=1 2> /dev/null
+            $PRINTF '\003'
+            $DD if="$SECTOR" bs=124 skip=1 2> /dev/null
+        } > "$SECTOR.new"
+        if [ "$(wc -c < "$SECTOR.new" 2> /dev/null)" -eq 512 ] 2> /dev/null && \
+                [ "$(read_byte "$SECTOR.new" 123)" = "$B3" ]; then
+            [ -n "$BLOCKDEV" ] && $BLOCKDEV --setrw "$DISK" > /dev/null 2>&1
+            $DD if="$SECTOR.new" of="$DISK" bs=512 seek="$START" count=1 >> "$LOGFILE" 2>&1
+            flush "$DISK" "$DEV"
+            if [ "$(read_byte "$DEV" 123)" = "$B3" ]; then
+                ui_print "Verification disabled, flags byte now $(flags_hex)"
+                rm -f "$SECTOR" "$SECTOR.new"
+                exit 0
+            fi
+            log "the whole disk write did not change the flags byte"
+        else
+            log "could not prepare the patched sector"
+        fi
+    else
+        log "the data at sector $START of $DISK is not the vbmeta partition, not writing"
+    fi
+    rm -f "$SECTOR" "$SECTOR.new"
+else
+    log "partition offset or disk not found (part $PART, disk $DISK, start $START)"
+fi
+
+# 3. Odin package: this device vbmeta with the flags set
+ui_print "Cannot write vbmeta from the recovery, creating an Odin package"
+WORK="$ODIN_DIR/vbmeta_disabled"
+rm -rf "$WORK" "$ODIN_DIR/vbmeta_disabled.tar"
+if mkdir -p "$WORK" && $DD if="$DEV" of="$WORK/vbmeta_stock_backup.img" bs=4096 >> "$LOGFILE" 2>&1; then
+    {
+        $DD if="$DEV" bs=123 count=1 2> /dev/null
+        $PRINTF '\003'
+        $DD if="$DEV" bs=124 skip=1 2> /dev/null
+    } > "$WORK/vbmeta.img"
+    SIZE_STOCK="$(wc -c < "$WORK/vbmeta_stock_backup.img" 2> /dev/null)"
+    SIZE_NEW="$(wc -c < "$WORK/vbmeta.img" 2> /dev/null)"
+    if [ -n "$SIZE_STOCK" ] && [ "$SIZE_STOCK" = "$SIZE_NEW" ] && \
+            [ "$($DD if="$WORK/vbmeta.img" bs=4 count=1 2> /dev/null)" = "AVB0" ] && \
+            [ "$(read_byte "$WORK/vbmeta.img" 123)" = "$B3" ]; then
+        TAR_DONE=false
+        for t in "tar" "toybox tar" "busybox tar"; do
+            rm -f "$ODIN_DIR/vbmeta_disabled.tar"
+            if (cd "$WORK" && $t -cf "$ODIN_DIR/vbmeta_disabled.tar" vbmeta.img) >> "$LOGFILE" 2>&1 && \
+                    [ -s "$ODIN_DIR/vbmeta_disabled.tar" ]; then
+                TAR_DONE=true
+                break
+            fi
+        done
+        if $TAR_DONE; then
+            ui_print "Created $ODIN_DIR/vbmeta_disabled.tar: flash it with Odin (AP) in download mode"
+        else
+            rm -f "$ODIN_DIR/vbmeta_disabled.tar"
+            ui_print "Created $WORK/vbmeta.img: put it in a tar and flash it with Odin (AP)"
+        fi
+        ui_print "Stock vbmeta backup: $WORK/vbmeta_stock_backup.img"
+    else
+        ui_print "ERROR: could not create the patched vbmeta image"
+    fi
+else
+    ui_print "ERROR: could not read $DEV into $WORK"
+fi
 exit 1
