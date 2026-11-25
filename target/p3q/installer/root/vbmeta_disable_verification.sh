@@ -10,17 +10,18 @@
 # 2. Samsung recovery kernels can refuse to open vbmeta for writing ("Read-only file system"): write the
 #    same byte through the whole disk, at the partition offset, once the data there is checked to be the
 #    vbmeta partition.
-# 3. Otherwise create /sdcard/vbmeta_disabled.tar (this device vbmeta with the flags set) to flash with
-#    Odin.
+# 3. Otherwise copy the vbmeta_disabled.tar the ROM zip ships (extracted to /tmp by the installer) to
+#    /sdcard, to flash with Odin.
 #
 # Run by the ROM installer (run_program, no argument) or as the update-binary of a standalone zip
-# (<api version> <ui_print fd> <zip>). Only uses sh and the dd/printf/blockdev/readlink/md5sum/tar the
+# (<api version> <ui_print fd> <zip>). Only uses sh and the dd/printf/blockdev/readlink/md5sum the
 # recovery ships (toolbox, toybox or busybox). Every step is logged to /tmp/recovery.log.
 # Exit status: 0 when verification is disabled (or there is nothing to do), 1 otherwise.
 
 OUTFD="$2"
 LOGFILE="/tmp/recovery.log"
 ODIN_DIR="/sdcard"
+ODIN_TAR="/tmp/vbmeta_disabled.tar"
 
 case "$OUTFD" in
     ''|*[!0-9]*)
@@ -210,41 +211,12 @@ else
     log "partition offset or disk not found (part $PART, disk $DISK, start $START)"
 fi
 
-# 3. Odin package: this device vbmeta with the flags set
-ui_print "Cannot write vbmeta from the recovery, creating an Odin package"
-WORK="$ODIN_DIR/vbmeta_disabled"
-rm -rf "$WORK" "$ODIN_DIR/vbmeta_disabled.tar"
-if mkdir -p "$WORK" && $DD if="$DEV" of="$WORK/vbmeta_stock_backup.img" bs=4096 >> "$LOGFILE" 2>&1; then
-    {
-        $DD if="$DEV" bs=123 count=1 2> /dev/null
-        $PRINTF '\003'
-        $DD if="$DEV" bs=124 skip=1 2> /dev/null
-    } > "$WORK/vbmeta.img"
-    SIZE_STOCK="$(wc -c < "$WORK/vbmeta_stock_backup.img" 2> /dev/null)"
-    SIZE_NEW="$(wc -c < "$WORK/vbmeta.img" 2> /dev/null)"
-    if [ -n "$SIZE_STOCK" ] && [ "$SIZE_STOCK" = "$SIZE_NEW" ] && \
-            [ "$($DD if="$WORK/vbmeta.img" bs=4 count=1 2> /dev/null)" = "AVB0" ] && \
-            [ "$(read_byte "$WORK/vbmeta.img" 123)" = "$B3" ]; then
-        TAR_DONE=false
-        for t in "tar" "toybox tar" "busybox tar"; do
-            rm -f "$ODIN_DIR/vbmeta_disabled.tar"
-            if (cd "$WORK" && $t -cf "$ODIN_DIR/vbmeta_disabled.tar" vbmeta.img) >> "$LOGFILE" 2>&1 && \
-                    [ -s "$ODIN_DIR/vbmeta_disabled.tar" ]; then
-                TAR_DONE=true
-                break
-            fi
-        done
-        if $TAR_DONE; then
-            ui_print "Created $ODIN_DIR/vbmeta_disabled.tar: flash it with Odin (AP) in download mode"
-        else
-            rm -f "$ODIN_DIR/vbmeta_disabled.tar"
-            ui_print "Created $WORK/vbmeta.img: put it in a tar and flash it with Odin (AP)"
-        fi
-        ui_print "Stock vbmeta backup: $WORK/vbmeta_stock_backup.img"
-    else
-        ui_print "ERROR: could not create the patched vbmeta image"
-    fi
+# 3. Odin package: the ROM zip ships vbmeta_disabled.tar (an unsigned vbmeta with the flags set, Odin
+#    rejects a modified stock vbmeta), the installer extracts it to /tmp
+ui_print "Cannot write vbmeta from the recovery"
+if [ -s "$ODIN_TAR" ] && cp -f "$ODIN_TAR" "$ODIN_DIR/vbmeta_disabled.tar" >> "$LOGFILE" 2>&1; then
+    ui_print "Before booting, flash $ODIN_DIR/vbmeta_disabled.tar with Odin (AP) in download mode"
 else
-    ui_print "ERROR: could not read $DEV into $WORK"
+    ui_print "Before booting, flash vbmeta_disabled.tar (in the ROM zip) with Odin (AP) in download mode"
 fi
 exit 1
